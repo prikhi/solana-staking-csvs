@@ -1,0 +1,25 @@
+---
+
+name: CI Build
+
+on:
+  push:
+    branches:
+      - master
+  schedule:
+    - cron: '0 0 * * *'
+  pull_request:
+  create:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: haskell/actions/setup@v1
+        with:
+          ghc-version: '8.10'
+          cabal-version: '3.0.0.0'
+          enable-stack: true
+      - run: stack test --fast --haddock --pedantic
