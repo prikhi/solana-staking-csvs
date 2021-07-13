@@ -19,6 +19,13 @@ jobs:
         resolver: ['lts-16', 'lts-17', 'lts-18']
     steps:
       - uses: actions/checkout@v2
+      - name: Cache Stack Artifacts
+        uses: actions/cache@v2
+        with:
+          key: stack-build
+          path: |
+            ~/.stack/
+            .stack-work/
       - uses: haskell/actions/setup@v1
         with:
           enable-stack: true
@@ -32,6 +39,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Cache Stack Artifacts
+        uses: actions/cache@v2
+        with:
+          key: stack-build
+          path: |
+            ~/.stack/
+            .stack-work/
       - uses: haskell/actions/setup@v1
         with:
           enable-stack: true
@@ -49,6 +63,14 @@ jobs:
         ghc: ['8.8', '8.10', '9.0']
     steps:
       - uses: actions/checkout@v2
+      - name: Cache Cabal Artifacts
+        uses: actions/cache@v2
+        with:
+          key: cabal-build
+          path: |
+            ~/.cabal/packages/
+            ~/.cabal/store
+            dist-newstyle/
       - uses: haskell/actions/setup@v1
         with:
           ghc-version: ${{ matrix.ghc }}
