@@ -1,6 +1,6 @@
 # Solana Staking CSVs
 
-[![solana-staking-csv Build Status](https://travis-ci.org/prikhi/solana-staking-csv.svg?branch=master)](https://travis-ci.org/prikhi/solana-staking-csv)
+[![solana-staking-csv Build Status](https://github.com/prikhi/solana-staking-csvs/actions/workflows/main.yml/badge.svg)](https://github.com/prikhi/solana-staking-csvs/actions/workflows/main.yml)
 
 
 Generate CSVs of your Solana staking rewards.
