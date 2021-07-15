@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        resolver: ['lts-16', 'lts-17', 'lts-18']
+        resolver: ['lts-17', 'lts-18']
     steps:
       - uses: actions/checkout@v2
       - name: Cache Stack Artifacts
