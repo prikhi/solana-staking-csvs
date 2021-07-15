@@ -52,11 +52,9 @@ run apiKey accountPubKey = runner $ do
                 .   _String
     -- Grab rewards for each stake account
     stakeRewards <-
-        fmap (mconcat . mapMaybe resultMaybe)
+        fmap (V.reverse . mconcat . mapMaybe resultMaybe)
         . forM stakeAddrs
-        $ \stakeAddress -> do
-              liftIO . putStrLn $ T.unpack stakeAddress
-              fmap (^. _Array) <$> getStakeRewards stakeAddress
+        $ (fmap (fmap (^. _Array)) . getStakeRewards)
     -- Find blocktime for each reward
     rewardData <- fmap V.catMaybes . forM stakeRewards $ \reward -> do
         let mbSlot :: Maybe Integer
