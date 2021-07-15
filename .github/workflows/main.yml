@@ -22,7 +22,7 @@ jobs:
       - name: Cache Stack Artifacts
         uses: actions/cache@v2
         with:
-          key: stack-build
+          key: stack-build-${{ matrix.resolver }}
           path: |
             ~/.stack/
             .stack-work/
@@ -42,7 +42,7 @@ jobs:
       - name: Cache Stack Artifacts
         uses: actions/cache@v2
         with:
-          key: stack-build
+          key: stack-build-nightly
           path: |
             ~/.stack/
             .stack-work/
@@ -66,7 +66,7 @@ jobs:
       - name: Cache Cabal Artifacts
         uses: actions/cache@v2
         with:
-          key: cabal-build
+          key: cabal-build-${{ matrix.ghc }}
           path: |
             ~/.cabal/packages/
             ~/.cabal/store
