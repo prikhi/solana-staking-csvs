@@ -1,11 +1,11 @@
 ---
 
 name:
-    solana-staking-csv
+    solana-staking-csvs
 version:
     0.1.0.0
 github:
-    prikhi/solana-staking-csv
+    prikhi/solana-staking-csvs
 homepage:
     https://github.com/prikhi/solana-staking-csv#readme
 license:
@@ -26,7 +26,7 @@ extra-source-files:
 
 
 synopsis:
-    Short, one-line summary of project here.
+    Generate CSVs of your Solana staking rewards.
 
 description: |
     Longer description of package here.
@@ -46,15 +46,30 @@ ghc-options:
 dependencies:
     - base >= 4.7 && < 5
 
+default-extensions:
+    - DataKinds
+    - LambdaCase
+    - OverloadedStrings
+    - TypeApplications
+    - ViewPatterns
+
 
 library:
     source-dirs:
         src
     dependencies:
-        []
+        - mtl
+        - aeson
+        - text
+        - req
+        - lens
+        - lens-aeson
+        - vector
+        - time
+        - scientific
 
 executables:
-    solana-staking-csv:
+    solana-staking-csvs:
         source-dirs:
             app
         main:
@@ -64,10 +79,10 @@ executables:
             - -rtsopts
             - -with-rtsopts "-N -T"
         dependencies:
-            - solana-staking-csv
+            - solana-staking-csvs
 
 tests:
-    solana-staking-csv-test:
+    solana-staking-csvs-test:
         main: Spec.hs
         source-dirs:
             tests
@@ -76,7 +91,7 @@ tests:
             - -rtsopts
             - -with-rtsopts "-N -T"
         dependencies:
-            - solana-staking-csv
+            - solana-staking-csvs
             - hedgehog
             - tasty
             - tasty-hedgehog

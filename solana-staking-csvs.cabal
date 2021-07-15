@@ -4,15 +4,15 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           solana-staking-csv
+name:           solana-staking-csvs
 version:        0.1.0.0
-synopsis:       Short, one-line summary of project here.
+synopsis:       Generate CSVs of your Solana staking rewards.
 description:    Longer description of package here.
                 .
                 Maybe include a simple usage example.
 category:       Web
 homepage:       https://github.com/prikhi/solana-staking-csv#readme
-bug-reports:    https://github.com/prikhi/solana-staking-csv/issues
+bug-reports:    https://github.com/prikhi/solana-staking-csvs/issues
 author:         Pavan Rikhi
 maintainer:     pavan.rikhi@gmail.com
 copyright:      2021 Pavan Rikhi
@@ -25,44 +25,71 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/prikhi/solana-staking-csv
+  location: https://github.com/prikhi/solana-staking-csvs
 
 library
   exposed-modules:
       Lib
   other-modules:
-      Paths_solana_staking_csv
+      Paths_solana_staking_csvs
   hs-source-dirs:
       src
+  default-extensions:
+      DataKinds
+      LambdaCase
+      OverloadedStrings
+      TypeApplications
+      ViewPatterns
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -O2
   build-depends:
-      base >=4.7 && <5
+      aeson
+    , base >=4.7 && <5
+    , lens
+    , lens-aeson
+    , mtl
+    , req
+    , scientific
+    , text
+    , time
+    , vector
   default-language: Haskell2010
 
-executable solana-staking-csv
+executable solana-staking-csvs
   main-is: Main.hs
   other-modules:
-      Paths_solana_staking_csv
+      Paths_solana_staking_csvs
   hs-source-dirs:
       app
+  default-extensions:
+      DataKinds
+      LambdaCase
+      OverloadedStrings
+      TypeApplications
+      ViewPatterns
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -O2 -threaded -rtsopts -with-rtsopts "-N -T"
   build-depends:
       base >=4.7 && <5
-    , solana-staking-csv
+    , solana-staking-csvs
   default-language: Haskell2010
 
-test-suite solana-staking-csv-test
+test-suite solana-staking-csvs-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      Paths_solana_staking_csv
+      Paths_solana_staking_csvs
   hs-source-dirs:
       tests
+  default-extensions:
+      DataKinds
+      LambdaCase
+      OverloadedStrings
+      TypeApplications
+      ViewPatterns
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -O2 -threaded -rtsopts -with-rtsopts "-N -T"
   build-depends:
       base >=4.7 && <5
     , hedgehog
-    , solana-staking-csv
+    , solana-staking-csvs
     , tasty
     , tasty-hedgehog
     , tasty-hunit
