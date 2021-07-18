@@ -58,15 +58,13 @@ library:
     source-dirs:
         src
     dependencies:
-        - mtl
         - aeson
-        - text
+        - containers
+        - mtl
         - req
-        - lens
-        - lens-aeson
-        - vector
-        - time
         - scientific
+        - text
+        - time
 
 executables:
     solana-staking-csvs:
