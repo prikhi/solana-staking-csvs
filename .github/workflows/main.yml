@@ -77,4 +77,4 @@ jobs:
           cabal-version: latest
           enable-stack: true
       - run: cabal update
-      - run: cabal new-test && cabal new-haddock
+      - run: cabal new-test --enable-tests && cabal new-haddock
