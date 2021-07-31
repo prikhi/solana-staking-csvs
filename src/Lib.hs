@@ -32,7 +32,6 @@ import           Data.Aeson                     ( (.:)
                                                 , withObject
                                                 )
 import           Data.Bifunctor                 ( second )
-import           Data.Either                    ( partitionEithers )
 import           Data.List                      ( sortOn )
 import           Data.Scientific                ( FPFormat(Fixed)
                                                 , Scientific
@@ -46,15 +45,18 @@ import           Data.Time.Format               ( defaultTimeLocale
                                                 , formatTime
                                                 )
 import           GHC.Generics                   ( Generic )
-import           Network.HTTP.Req               ( (/~)
+import           Network.HTTP.Req               ( (/:)
+                                                , (/~)
                                                 , GET(GET)
                                                 , NoReqBody(NoReqBody)
+                                                , Option
                                                 , Scheme(Https)
                                                 , Url
                                                 , defaultHttpConfig
                                                 , header
                                                 , https
                                                 , jsonResponse
+                                                , queryParam
                                                 , renderUrl
                                                 , req
                                                 , responseBody
@@ -73,18 +75,18 @@ import qualified Data.Text.IO                  as T
 run :: String -> String -> IO ()
 run apiKey accountPubKey = either (error . show) return <=< runner $ do
     -- Grab all stake accounts
-    stakes              <- saResults <$> (getAccountStakes >>= raiseAPIError)
+    stakes <- saResults <$> (getAccountStakes >>= raiseAPIError)
     -- Grab rewards for each stake account
-    stakeRewardsResults <- fmap reverse . forM stakes $ \sa -> do
-        second (sa, )
-            <$> runExceptT (getStakeRewards (saPubKey sa) >>= raiseAPIError)
-    let (stakeErrors, stakeRewards) = partitionEithers stakeRewardsResults
+    (stakeErrors, stakeRewards) <-
+        fmap (foldr (\(e_, r_) (e, r) -> (e_ <> e, r_ <> r)) ([], []))
+        . forM stakes
+        $ \sa -> do
+              second (map (sa, )) <$> getAllStakeRewards (saPubKey sa)
     unless (null stakeErrors) . liftIO $ do
         hPutStrLn stderr "Got errors while fetching stake rewards:"
         mapM_ (hPutStrLn stderr . ("\t" <>) . show) stakeErrors
     -- Build ordered list of [(acc, reward, time)]
-    let orderedRewards = sortOn (srTimestamp . snd)
-            $ concatMap (\(acc, rs) -> map (acc, ) rs) stakeRewards
+    let orderedRewards = sortOn (srTimestamp . snd) stakeRewards
     -- Print out the CSV
     liftIO $ T.putStrLn "time,amount,stakeAccount,epoch"
     forM_ orderedRewards $ \(stakeAccount, reward) ->
@@ -138,7 +140,9 @@ getAccountStakes
     :: (MonadIO m, MonadReader Config m) => m (APIResponse StakingAccounts)
 getAccountStakes = do
     pubkey <- asks cAccountPubKey
-    getReq (baseUrl /~ ("account" :: T.Text) /~ pubkey /~ ("stakes" :: T.Text))
+    getReq
+        (baseUrl /~ ("account" :: T.Text) /~ pubkey /~ ("stakes" :: T.Text))
+        mempty
 
 -- | Single Result Page of Staking Accounts Query.
 data StakingAccounts = StakingAccounts
@@ -197,18 +201,46 @@ renderLamports =
         . fromLamports
 
 
--- | Get the staking reards with a staking account's pubkey.
+-- | Get the staking rewards with a staking account's pubkey.
 getStakeRewards
     :: (MonadIO m, MonadReader Config m)
     => StakingPubKey
+    -> Maybe Integer
     -> m (APIResponse [StakeReward])
-getStakeRewards (StakingPubKey stakeAccountPubkey) = do
-    getReq
-        (  baseUrl
-        /~ ("account" :: T.Text)
-        /~ stakeAccountPubkey
-        /~ ("stake-rewards" :: T.Text)
-        )
+getStakeRewards (StakingPubKey stakeAccountPubkey) mbEpochCursor = do
+    getReq (baseUrl /: "account" /: stakeAccountPubkey /: "stake-rewards")
+           (queryParam "cursor" mbEpochCursor)
+
+-- | Get all the staking rewards for the given account.
+--
+-- The API's @stake-rewards@ route only returns a maximum of 5 rewards, so
+-- we have to use the earliest epoch as the @cursor@ in an additional
+-- request to see if there are any more rewards.
+getAllStakeRewards
+    :: forall m
+     . (MonadIO m, MonadReader Config m)
+    => StakingPubKey
+    -> m ([APIError], [StakeReward])
+getAllStakeRewards pubkey =
+    getStakeRewards pubkey Nothing >>= runExceptT . raiseAPIError >>= go
+        ([], [])
+  where
+    go
+        :: ([APIError], [StakeReward])
+        -> Either APIError [StakeReward]
+        -> m ([APIError], [StakeReward])
+    go (errs, rws) = \case
+        Left  err     -> return (err : errs, rws)
+        Right rewards -> if length rewards < 5
+            then return (errs, rewards <> rws)
+            else
+                let minEpoch = minimum $ map srEpoch rewards
+                in  getStakeRewards pubkey (Just minEpoch)
+                    >>= runExceptT
+                    .   raiseAPIError
+                    >>= go (errs, rewards <> rws)
+
+
 
 -- | A Staking Reward Payment.
 data StakeReward = StakeReward
@@ -234,7 +266,7 @@ instance FromJSON StakeReward where
 getBlock
     :: (MonadIO m, MonadReader Config m) => Integer -> m (APIResponse Block)
 getBlock blockNum = do
-    getReq (baseUrl /~ ("block" :: T.Text) /~ blockNum)
+    getReq (baseUrl /~ ("block" :: T.Text) /~ blockNum) mempty
 
 -- | A single block on the Solana blockchain.
 data Block = Block
@@ -261,8 +293,9 @@ getReq
     :: forall m a
      . (MonadReader Config m, MonadIO m, FromJSON a)
     => Url 'Https
+    -> Option 'Https
     -> m (APIResponse a)
-getReq endpoint = fetchWithRetries 0
+getReq endpoint options = fetchWithRetries 0
   where
     maxRetries :: Integer
     maxRetries = 5
@@ -275,7 +308,8 @@ getReq endpoint = fetchWithRetries 0
                     header "Authorization" $ "Bearer: " <> encodeUtf8 apikey
             respBody <- responseBody <$> runReq
                 defaultHttpConfig
-                (req GET endpoint NoReqBody jsonResponse authHeader)
+                (req GET endpoint NoReqBody jsonResponse $ authHeader <> options
+                )
             case respBody of
                 ProcessingResponse -> do
                     liftIO $ hPutStrLn
