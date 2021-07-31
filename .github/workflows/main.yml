@@ -15,6 +15,7 @@ jobs:
     name: Stack
     runs-on: ubuntu-latest
     strategy:
+      max-parallel: 4
       matrix:
         resolver: ['lts-18']
     steps:
@@ -22,10 +23,14 @@ jobs:
       - name: Cache Stack Artifacts
         uses: actions/cache@v2
         with:
-          key: stack-build-${{ matrix.resolver }}
+          key: stack-build-${{ matrix.resolver }}-${{ github.ref }}-${{ github.sha }}
           path: |
             ~/.stack/
             .stack-work/
+          restore-keys: |
+            stack-build-${{ matrix.resolver }}-${{ github.ref }}-
+            stack-build-${{ matrix.resolver }}-
+            stack-build-
       - uses: haskell/actions/setup@v1
         with:
           enable-stack: true
@@ -39,13 +44,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Get current year
+        id: year
+        run: echo "::set-output name=year::$(date +%Y)"
+      - name: Get current month
+        id: month
+        run: echo "::set-output name=month::$(date +%m)"
+      - name: Get current day
+        id: day
+        run: echo "::set-output name=day::$(date +%d)"
       - name: Cache Stack Artifacts
         uses: actions/cache@v2
         with:
-          key: stack-build-nightly
+          key: stack-build-nightly-${{ steps.year.outputs.year }}-${{ steps.month.output.month }}-${{ steps.day.output.day }}
           path: |
             ~/.stack/
             .stack-work/
+          restore-keys: |
+            stack-build-nightly-${{ steps.year.outputs.year }}-${{ steps.month.output.month }}-
+            stack-build-nightly-${{ steps.year.outputs.year }}-
+            stack-build-nightly-
       - uses: haskell/actions/setup@v1
         with:
           enable-stack: true
@@ -59,6 +77,7 @@ jobs:
     name: GHC / Cabal
     runs-on: ubuntu-latest
     strategy:
+      max-parallel: 4
       matrix:
         ghc: ['8.8', '8.10', '9.0']
     steps:
@@ -66,11 +85,15 @@ jobs:
       - name: Cache Cabal Artifacts
         uses: actions/cache@v2
         with:
-          key: cabal-build-${{ matrix.ghc }}
+          key: cabal-build-${{ matrix.ghc }}-${{ github.ref }}-${{ github.sha }}
           path: |
             ~/.cabal/packages/
             ~/.cabal/store
             dist-newstyle/
+          restore-keys: |
+            cabal-build-${{ matrix.ghc }}-${{ github.ref }}-
+            cabal-build-${{ matrix.ghc }}-
+            cabal-build-
       - uses: haskell/actions/setup@v1
         with:
           ghc-version: ${{ matrix.ghc }}
