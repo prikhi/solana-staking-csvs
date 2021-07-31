@@ -48,8 +48,10 @@ dependencies:
 
 default-extensions:
     - DataKinds
+    - DeriveGeneric
     - LambdaCase
     - OverloadedStrings
+    - TupleSections
     - TypeApplications
     - ViewPatterns
 
@@ -59,7 +61,6 @@ library:
         src
     dependencies:
         - aeson
-        - containers
         - mtl
         - req
         - scientific

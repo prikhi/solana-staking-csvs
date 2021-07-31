@@ -1,7 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-| Currently a very rough, incomplete Solana Beach API along with the
 CLI's 'run' function for fetching rewards & printing out a CSV.
@@ -9,22 +8,32 @@ CLI's 'run' function for fetching rewards & printing out a CSV.
 -}
 module Lib where
 
-import           Control.Monad                  ( forM
+import           Control.Concurrent             ( threadDelay )
+import           Control.Monad                  ( (<=<)
+                                                , forM
                                                 , forM_
+                                                , unless
                                                 )
-import           Control.Monad.Reader           ( ReaderT
+import           Control.Monad.Except           ( ExceptT
+                                                , MonadError(throwError)
+                                                , runExceptT
+                                                )
+import           Control.Monad.Reader           ( MonadIO
+                                                , MonadReader
+                                                , ReaderT
                                                 , asks
                                                 , liftIO
                                                 , runReaderT
                                                 )
 import           Data.Aeson                     ( (.:)
+                                                , (.:?)
                                                 , FromJSON(parseJSON)
+                                                , Value(Object)
                                                 , withObject
                                                 )
-import           Data.List                      ( nub
-                                                , sortOn
-                                                )
-import           Data.Maybe                     ( mapMaybe )
+import           Data.Bifunctor                 ( second )
+import           Data.Either                    ( partitionEithers )
+import           Data.List                      ( sortOn )
 import           Data.Scientific                ( FPFormat(Fixed)
                                                 , Scientific
                                                 , formatScientific
@@ -46,12 +55,15 @@ import           Network.HTTP.Req               ( (/~)
                                                 , header
                                                 , https
                                                 , jsonResponse
+                                                , renderUrl
                                                 , req
                                                 , responseBody
                                                 , runReq
                                                 )
+import           System.IO                      ( hPutStrLn
+                                                , stderr
+                                                )
 
-import qualified Data.Map.Strict               as M
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
 
@@ -59,35 +71,28 @@ import qualified Data.Text.IO                  as T
 --
 -- TODO: concurrent/pooled requests, but w/ 100 req/s limit
 run :: String -> String -> IO ()
-run apiKey accountPubKey = runner $ do
+run apiKey accountPubKey = either (error . show) return <=< runner $ do
     -- Grab all stake accounts
-    stakes <- saResults <$> getAccountStakes
+    stakes              <- saResults <$> (getAccountStakes >>= raiseAPIError)
     -- Grab rewards for each stake account
-    (stakeRewards :: [(StakingAccount, [StakeReward])]) <-
-        fmap reverse . forM stakes $ \sa -> do
-            (sa, ) <$> getStakeRewards (saPubKey sa)
-    -- Build map of Slot->Time
-    let slots = nub $ concatMap (map srSlot . snd) stakeRewards
-    slotTimes <- fmap M.fromList . forM slots $ \slot -> do
-        block <- getBlock slot
-        return (slot, bBlockTime block)
+    stakeRewardsResults <- fmap reverse . forM stakes $ \sa -> do
+        second (sa, )
+            <$> runExceptT (getStakeRewards (saPubKey sa) >>= raiseAPIError)
+    let (stakeErrors, stakeRewards) = partitionEithers stakeRewardsResults
+    unless (null stakeErrors) . liftIO $ do
+        hPutStrLn stderr "Got errors while fetching stake rewards:"
+        mapM_ (hPutStrLn stderr . ("\t" <>) . show) stakeErrors
     -- Build ordered list of [(acc, reward, time)]
-    let
-        orderedRewards =
-            mapMaybe
-                    (\(acc, rw) ->
-                        (acc, rw, ) <$> M.lookup (srSlot rw) slotTimes
-                    )
-                . sortOn (\(_, rw) -> srSlot rw)
-                $ concatMap (\(acc, rs) -> map (acc, ) rs) stakeRewards
+    let orderedRewards = sortOn (srTimestamp . snd)
+            $ concatMap (\(acc, rs) -> map (acc, ) rs) stakeRewards
     -- Print out the CSV
     liftIO $ T.putStrLn "time,amount,stakeAccount,epoch"
-    forM_ orderedRewards $ \(stakeAccount, reward, time) ->
-        let
-            formattedTime =
+    forM_ orderedRewards $ \(stakeAccount, reward) ->
+        let formattedTime =
                 T.pack
                     $ formatTime defaultTimeLocale "%F %T%Z"
-                    $ posixSecondsToUTCTime time
+                    $ posixSecondsToUTCTime
+                    $ srTimestamp reward
             formattedAmount = renderLamports $ srAmount reward
             output          = T.intercalate
                 ","
@@ -96,11 +101,10 @@ run apiKey accountPubKey = runner $ do
                 , fromStakingPubKey (saPubKey stakeAccount)
                 , T.pack . show $ srEpoch reward
                 ]
-        in
-            liftIO $ T.putStrLn output
+        in  liftIO $ T.putStrLn output
   where
-    runner :: ReaderT Config IO a -> IO a
-    runner = flip runReaderT (mkConfig apiKey accountPubKey)
+    runner :: ReaderT Config (ExceptT APIError IO) a -> IO (Either APIError a)
+    runner = runExceptT . flip runReaderT (mkConfig apiKey accountPubKey)
 
 
 -- API
@@ -130,7 +134,8 @@ baseUrl = https "api.solanabeach.io" /~ ("v1" :: T.Text)
 -- of generic JSON values.
 
 -- | Get the staking accounts for the 'cAccountPubKey'.
-getAccountStakes :: ReaderT Config IO StakingAccounts
+getAccountStakes
+    :: (MonadIO m, MonadReader Config m) => m (APIResponse StakingAccounts)
 getAccountStakes = do
     pubkey <- asks cAccountPubKey
     getReq (baseUrl /~ ("account" :: T.Text) /~ pubkey /~ ("stakes" :: T.Text))
@@ -193,7 +198,10 @@ renderLamports =
 
 
 -- | Get the staking reards with a staking account's pubkey.
-getStakeRewards :: StakingPubKey -> ReaderT Config IO [StakeReward]
+getStakeRewards
+    :: (MonadIO m, MonadReader Config m)
+    => StakingPubKey
+    -> m (APIResponse [StakeReward])
 getStakeRewards (StakingPubKey stakeAccountPubkey) = do
     getReq
         (  baseUrl
@@ -204,24 +212,27 @@ getStakeRewards (StakingPubKey stakeAccountPubkey) = do
 
 -- | A Staking Reward Payment.
 data StakeReward = StakeReward
-    { srEpoch  :: Integer
+    { srEpoch     :: Integer
     -- ^ The Epoch the reward was paid.
-    , srSlot   :: Integer
+    , srSlot      :: Integer
     -- ^ The 'Block' number of the reward.
-    , srAmount :: Lamports
+    , srAmount    :: Lamports
     -- ^ The total number of 'Lamports' awarded.
+    , srTimestamp :: POSIXTime
     }
     deriving (Show, Read, Eq, Generic)
 
 instance FromJSON StakeReward where
     parseJSON = withObject "StakeReward" $ \o -> do
-        srEpoch  <- o .: "epoch"
-        srSlot   <- o .: "effectiveSlot"
-        srAmount <- o .: "amount"
+        srEpoch     <- o .: "epoch"
+        srSlot      <- o .: "effectiveSlot"
+        srAmount    <- o .: "amount"
+        srTimestamp <- o .: "timestamp"
         return StakeReward { .. }
 
 -- | Get information about a specific block number.
-getBlock :: Integer -> ReaderT Config IO Block
+getBlock
+    :: (MonadIO m, MonadReader Config m) => Integer -> m (APIResponse Block)
 getBlock blockNum = do
     getReq (baseUrl /~ ("block" :: T.Text) /~ blockNum)
 
@@ -246,10 +257,62 @@ instance FromJSON Block where
 
 
 -- | Generic GET request to the Solana Beach API.
-getReq :: FromJSON a => Url 'Https -> ReaderT Config IO a
-getReq endpoint = do
-    apikey <- asks cApiKey
-    let authHeader = header "Authorization" $ "Bearer: " <> encodeUtf8 apikey
-    responseBody <$> runReq
-        defaultHttpConfig
-        (req GET endpoint NoReqBody jsonResponse authHeader)
+getReq
+    :: forall m a
+     . (MonadReader Config m, MonadIO m, FromJSON a)
+    => Url 'Https
+    -> m (APIResponse a)
+getReq endpoint = fetchWithRetries 0
+  where
+    maxRetries :: Integer
+    maxRetries = 5
+    fetchWithRetries :: Integer -> m (APIResponse a)
+    fetchWithRetries retryCount = if retryCount >= maxRetries
+        then return $ ErrorResponse $ RetriesExceeded $ renderUrl endpoint
+        else do
+            apikey <- asks cApiKey
+            let authHeader =
+                    header "Authorization" $ "Bearer: " <> encodeUtf8 apikey
+            respBody <- responseBody <$> runReq
+                defaultHttpConfig
+                (req GET endpoint NoReqBody jsonResponse authHeader)
+            case respBody of
+                ProcessingResponse -> do
+                    liftIO $ hPutStrLn
+                        stderr
+                        "Waiting for API to finish processing request..."
+                    liftIO $ threadDelay $ 10 * 1000000
+                    fetchWithRetries (retryCount + 1)
+                _ -> return respBody
+
+
+
+
+data APIResponse a
+    = SuccessfulReponse a
+    | ProcessingResponse
+    | ErrorResponse APIError
+    deriving (Show, Read, Eq)
+
+instance FromJSON a => FromJSON (APIResponse a) where
+    parseJSON v = case v of
+        Object o -> do
+            o .:? "err" >>= \case
+                Just errMsg -> o .:? "processing" >>= \case
+                    Nothing          -> return $ ErrorResponse $ APIError errMsg
+                    Just (_ :: Bool) -> return ProcessingResponse
+                Nothing -> fmap SuccessfulReponse . parseJSON $ Object o
+        _ -> SuccessfulReponse <$> parseJSON v
+
+raiseAPIError :: MonadError APIError m => APIResponse a -> m a
+raiseAPIError = \case
+    SuccessfulReponse v -> return v
+    ProcessingResponse ->
+        throwError $ APIError "Request cancelled during processing wait."
+    ErrorResponse err -> throwError err
+
+
+data APIError
+    = APIError T.Text
+    | RetriesExceeded T.Text
+    deriving (Show, Read, Eq, Generic)

@@ -36,15 +36,16 @@ library
       src
   default-extensions:
       DataKinds
+      DeriveGeneric
       LambdaCase
       OverloadedStrings
+      TupleSections
       TypeApplications
       ViewPatterns
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -O2
   build-depends:
       aeson
     , base >=4.7 && <5
-    , containers
     , mtl
     , req
     , scientific
@@ -60,8 +61,10 @@ executable solana-staking-csvs
       app
   default-extensions:
       DataKinds
+      DeriveGeneric
       LambdaCase
       OverloadedStrings
+      TupleSections
       TypeApplications
       ViewPatterns
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -O2 -threaded -rtsopts -with-rtsopts "-N -T"
@@ -79,8 +82,10 @@ test-suite solana-staking-csvs-test
       tests
   default-extensions:
       DataKinds
+      DeriveGeneric
       LambdaCase
       OverloadedStrings
+      TupleSections
       TypeApplications
       ViewPatterns
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -O2 -threaded -rtsopts -with-rtsopts "-N -T"
