@@ -44,25 +44,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Get current year
-        id: year
-        run: echo "::set-output name=year::$(date +%Y)"
-      - name: Get current month
-        id: month
-        run: echo "::set-output name=month::$(date +%m)"
-      - name: Get current day
-        id: day
-        run: echo "::set-output name=day::$(date +%d)"
+      - name: Get Current Date
+        id: date
+        run: echo -e "::set-output name=year::$(date +%Y)\n::set-output name=month::$(date +%m)\n::set-output name=day::$(date +%d)"
       - name: Cache Stack Artifacts
         uses: actions/cache@v2
         with:
-          key: stack-build-nightly-${{ steps.year.outputs.year }}-${{ steps.month.output.month }}-${{ steps.day.output.day }}
+          key: stack-build-nightly-${{ steps.date.outputs.year }}-${{ steps.date.outputs.month }}-${{ steps.date.outputs.day }}
           path: |
             ~/.stack/
             .stack-work/
           restore-keys: |
-            stack-build-nightly-${{ steps.year.outputs.year }}-${{ steps.month.output.month }}-
-            stack-build-nightly-${{ steps.year.outputs.year }}-
+            stack-build-nightly-${{ steps.date.outputs.year }}-${{ steps.date.outputs.month }}-
+            stack-build-nightly-${{ steps.date.outputs.year }}-
             stack-build-nightly-
       - uses: haskell/actions/setup@v1
         with:
