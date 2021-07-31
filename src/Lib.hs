@@ -129,7 +129,7 @@ mkConfig (T.pack -> cApiKey) (T.pack -> cAccountPubKey) = Config { .. }
 
 -- | Base URL to Solana Beach's API
 baseUrl :: Url 'Https
-baseUrl = https "api.solanabeach.io" /~ ("v1" :: T.Text)
+baseUrl = https "api.solanabeach.io" /: "v1"
 
 
 -- TODO: All the following functions should return discrete types instead
@@ -140,9 +140,7 @@ getAccountStakes
     :: (MonadIO m, MonadReader Config m) => m (APIResponse StakingAccounts)
 getAccountStakes = do
     pubkey <- asks cAccountPubKey
-    getReq
-        (baseUrl /~ ("account" :: T.Text) /~ pubkey /~ ("stakes" :: T.Text))
-        mempty
+    getReq (baseUrl /: "account" /~ pubkey /: "stakes") mempty
 
 -- | Single Result Page of Staking Accounts Query.
 data StakingAccounts = StakingAccounts
@@ -266,7 +264,7 @@ instance FromJSON StakeReward where
 getBlock
     :: (MonadIO m, MonadReader Config m) => Integer -> m (APIResponse Block)
 getBlock blockNum = do
-    getReq (baseUrl /~ ("block" :: T.Text) /~ blockNum) mempty
+    getReq (baseUrl /: "block" /~ blockNum) mempty
 
 -- | A single block on the Solana blockchain.
 data Block = Block
