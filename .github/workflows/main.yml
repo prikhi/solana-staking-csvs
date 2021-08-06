@@ -50,11 +50,13 @@ jobs:
       - name: Cache Stack Artifacts
         uses: actions/cache@v2
         with:
-          key: stack-build-nightly-${{ steps.date.outputs.year }}-${{ steps.date.outputs.month }}-${{ steps.date.outputs.day }}
+          key: stack-build-nightly-${{ steps.date.outputs.year }}-${{ steps.date.outputs.month }}-${{ steps.date.outputs.day }}-${{ github.ref }}-${{ github.sha }}
           path: |
             ~/.stack/
             .stack-work/
           restore-keys: |
+            stack-build-nightly-${{ steps.date.outputs.year }}-${{ steps.date.outputs.month }}-${{ steps.date.outputs.day }}-${{ github.ref }}-
+            stack-build-nightly-${{ steps.date.outputs.year }}-${{ steps.date.outputs.month }}-${{ steps.date.outputs.day }}-
             stack-build-nightly-${{ steps.date.outputs.year }}-${{ steps.date.outputs.month }}-
             stack-build-nightly-${{ steps.date.outputs.year }}-
             stack-build-nightly-
