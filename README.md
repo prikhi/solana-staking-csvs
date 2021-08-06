@@ -12,6 +12,16 @@ Requires [`stack`][get-stack] & a SolanaBeach API key, which you can request
 stack run -- <YOUR_API_KEY> <ACCOUNT_PUBKEY>
 ```
 
+TODO:
+
+* Use `cmdargs` for argument parsing.
+* Add `-Y <year>` flag to limit years exported.
+* Add `-o <file>` flag to write to file instead of stdout.
+* Allow sourcing pubkey & apikey from env variables?
+* Move SolanaBeach API to separate, published package.
+* Publish on Hackage & Stackage.
+* Add necessary fields for CoinTracking imports(currency & "trade id"?)
+
 [get-stack]: https://docs.haskellstack.org/en/stable/README/
 [solanabeach-api]: https://github.com/solana-beach/api
 
