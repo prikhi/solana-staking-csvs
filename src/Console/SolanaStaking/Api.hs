@@ -1,29 +1,44 @@
-{-# LANGUAGE RecordWildCards #-}
+{-| Solana Beach API requests & responses.
+
+TODO: Extract into a @solana-beach-api@ package.
+-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-| Currently a very rough, incomplete Solana Beach API along with the
-CLI's 'run' function for fetching rewards & printing out a CSV.
-
--}
-module Lib where
+module Console.SolanaStaking.Api
+    ( -- * Configuration
+      Config(..)
+    , mkConfig
+      -- * Requests / Responses
+    , APIResponse(..)
+    , APIError(..)
+    , raiseAPIError
+      -- ** Get Stake Accounts
+    , getAccountStakes
+    , StakingAccounts(..)
+    , StakingAccount(..)
+      -- ** Get Staking Rewards
+    , getAllStakeRewards
+    , getStakeRewards
+    , StakeReward(..)
+      -- ** Get Block
+    , getBlock
+    , Block(..)
+      -- * General API Types
+    , Lamports(..)
+    , renderLamports
+    , StakingPubKey(..)
+    ) where
 
 import           Control.Concurrent             ( threadDelay )
-import           Control.Monad                  ( (<=<)
-                                                , forM
-                                                , forM_
-                                                , unless
-                                                )
-import           Control.Monad.Except           ( ExceptT
-                                                , MonadError(throwError)
+import           Control.Monad.Except           ( MonadError(throwError)
                                                 , runExceptT
                                                 )
 import           Control.Monad.Reader           ( MonadIO
                                                 , MonadReader
-                                                , ReaderT
                                                 , asks
                                                 , liftIO
-                                                , runReaderT
                                                 )
 import           Data.Aeson                     ( (.:)
                                                 , (.:?)
@@ -31,19 +46,12 @@ import           Data.Aeson                     ( (.:)
                                                 , Value(Object)
                                                 , withObject
                                                 )
-import           Data.Bifunctor                 ( second )
-import           Data.List                      ( sortOn )
 import           Data.Scientific                ( FPFormat(Fixed)
                                                 , Scientific
                                                 , formatScientific
                                                 )
 import           Data.Text.Encoding             ( encodeUtf8 )
-import           Data.Time.Clock.POSIX          ( POSIXTime
-                                                , posixSecondsToUTCTime
-                                                )
-import           Data.Time.Format               ( defaultTimeLocale
-                                                , formatTime
-                                                )
+import           Data.Time.Clock.POSIX          ( POSIXTime )
 import           GHC.Generics                   ( Generic )
 import           Network.HTTP.Req               ( (/:)
                                                 , (/~)
@@ -67,49 +75,6 @@ import           System.IO                      ( hPutStrLn
                                                 )
 
 import qualified Data.Text                     as T
-import qualified Data.Text.IO                  as T
-
--- | Pull staking rewards data for the account & print a CSV to stdout.
---
--- TODO: concurrent/pooled requests, but w/ 100 req/s limit
-run :: String -> String -> IO ()
-run apiKey accountPubKey = either (error . show) return <=< runner $ do
-    -- Grab all stake accounts
-    stakes <- saResults <$> (getAccountStakes >>= raiseAPIError)
-    -- Grab rewards for each stake account
-    (stakeErrors, stakeRewards) <-
-        fmap (foldr (\(e_, r_) (e, r) -> (e_ <> e, r_ <> r)) ([], []))
-        . forM stakes
-        $ \sa -> do
-              second (map (sa, )) <$> getAllStakeRewards (saPubKey sa)
-    unless (null stakeErrors) . liftIO $ do
-        hPutStrLn stderr "Got errors while fetching stake rewards:"
-        mapM_ (hPutStrLn stderr . ("\t" <>) . show) stakeErrors
-    -- Build ordered list of [(acc, reward, time)]
-    let orderedRewards = sortOn (srTimestamp . snd) stakeRewards
-    -- Print out the CSV
-    liftIO $ T.putStrLn "time,amount,stakeAccount,epoch"
-    forM_ orderedRewards $ \(stakeAccount, reward) ->
-        let formattedTime =
-                T.pack
-                    $ formatTime defaultTimeLocale "%F %T%Z"
-                    $ posixSecondsToUTCTime
-                    $ srTimestamp reward
-            formattedAmount = renderLamports $ srAmount reward
-            output          = T.intercalate
-                ","
-                [ formattedTime
-                , formattedAmount
-                , fromStakingPubKey (saPubKey stakeAccount)
-                , T.pack . show $ srEpoch reward
-                ]
-        in  liftIO $ T.putStrLn output
-  where
-    runner :: ReaderT Config (ExceptT APIError IO) a -> IO (Either APIError a)
-    runner = runExceptT . flip runReaderT (mkConfig apiKey accountPubKey)
-
-
--- API
 
 -- | Solana Beach API Configuration
 data Config = Config
@@ -131,9 +96,6 @@ mkConfig (T.pack -> cApiKey) (T.pack -> cAccountPubKey) = Config { .. }
 baseUrl :: Url 'Https
 baseUrl = https "api.solanabeach.io" /: "v1"
 
-
--- TODO: All the following functions should return discrete types instead
--- of generic JSON values.
 
 -- | Get the staking accounts for the 'cAccountPubKey'.
 getAccountStakes
@@ -279,14 +241,16 @@ instance FromJSON Block where
     parseJSON = withObject "Block" $ \o -> do
         bNumber    <- o .: "blocknumber"
         bBlockTime <-
-            o
-            .:  "blocktime"
+            (o .: "blocktime")
             >>= fmap (fromInteger . (truncate @Scientific))
             .   (.: "absolute")
         return Block { .. }
 
 
--- | Generic GET request to the Solana Beach API.
+-- | Generic GET request to the Solana Beach API with up to 5 retries for
+-- @ProcessingResponse@.
+--
+-- Note: Prints to 'stderr' when waiting for request to finish processing.
 getReq
     :: forall m a
      . (MonadReader Config m, MonadIO m, FromJSON a)
@@ -320,12 +284,15 @@ getReq endpoint options = fetchWithRetries 0
 
 
 
+-- | Wrapper around error & processing responses from the API.
 data APIResponse a
     = SuccessfulReponse a
     | ProcessingResponse
     | ErrorResponse APIError
     deriving (Show, Read, Eq)
 
+-- | Attempts to parse a processing response, then an error response,
+-- & finally the inner @a@ response.
 instance FromJSON a => FromJSON (APIResponse a) where
     parseJSON v = case v of
         Object o -> do
@@ -336,6 +303,8 @@ instance FromJSON a => FromJSON (APIResponse a) where
                 Nothing -> fmap SuccessfulReponse . parseJSON $ Object o
         _ -> SuccessfulReponse <$> parseJSON v
 
+-- | Pull the inner value out of an 'APIResponse' or throw the respective
+-- 'APIError'.
 raiseAPIError :: MonadError APIError m => APIResponse a -> m a
 raiseAPIError = \case
     SuccessfulReponse v -> return v
@@ -344,7 +313,10 @@ raiseAPIError = \case
     ErrorResponse err -> throwError err
 
 
+-- | Potential error responses from the Solana Beach API.
 data APIError
     = APIError T.Text
+    -- ^ Generic API error with message.
     | RetriesExceeded T.Text
+    -- ^ Exceeded maximum number of 'ProcessingResponse' retries.
     deriving (Show, Read, Eq, Generic)

@@ -37,7 +37,8 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
+      Console.SolanaStaking.Api
+      Console.SolanaStaking.Main
   other-modules:
       Paths_solana_staking_csvs
   hs-source-dirs:

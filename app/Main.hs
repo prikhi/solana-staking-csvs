@@ -1,7 +1,6 @@
-{-# LANGUAGE LambdaCase #-}
 module Main where
 
-import           Lib                            ( run )
+import           Console.SolanaStaking.Main     ( run )
 
 import           System.Environment             ( getArgs )
 
