@@ -25,12 +25,6 @@ import           Data.Bifunctor                 ( bimap
                                                 )
 import           Data.List                      ( sortOn )
 import           Data.Maybe                     ( fromMaybe )
-import           Data.Time.Clock.POSIX          ( POSIXTime
-                                                , posixSecondsToUTCTime
-                                                )
-import           Data.Time.Format               ( defaultTimeLocale
-                                                , formatTime
-                                                )
 import           Data.Version                   ( showVersion )
 import           System.Console.CmdArgs         ( (&=)
                                                 , Data
@@ -51,10 +45,10 @@ import           System.IO                      ( hPutStrLn
                                                 )
 
 import           Console.SolanaStaking.Api
+import           Console.SolanaStaking.Csv      ( makeCsvContents )
 import           Paths_solana_staking_csvs      ( version )
 
-import qualified Data.Text                     as T
-import qualified Data.Text.IO                  as T
+import qualified Data.ByteString.Lazy          as LBS
 
 
 -- | Pull staking rewards data for the account & print a CSV to stdout.
@@ -73,27 +67,14 @@ run Args {..} = either (error . show) return <=< runner $ do
         mapM_ (hPutStrLn stderr . ("\t" <>) . show) stakeErrors
     -- Write the CSV
     let orderedRewards = sortOn (srTimestamp . snd) stakeRewards
-        header         = "time,amount,stakeAccount,epoch\n"
-        output =
-            T.unlines . flip map orderedRewards $ \(stakeAccount, reward) ->
-                T.intercalate
-                    ","
-                    [ formatTimestamp $ srTimestamp reward
-                    , renderLamports $ srAmount reward
-                    , fromStakingPubKey $ saPubKey stakeAccount
-                    , T.pack . show $ srEpoch reward
-                    ]
-        outputFile = fromMaybe "-" argOutputFile
+        output         = makeCsvContents orderedRewards
+        outputFile     = fromMaybe "-" argOutputFile
     if outputFile == "-"
-        then liftIO . T.putStrLn $ header <> output
-        else liftIO . T.writeFile outputFile $ header <> output
-
+        then liftIO $ LBS.putStr output
+        else liftIO $ LBS.writeFile outputFile output
   where
     runner :: ReaderT Config (ExceptT APIError IO) a -> IO (Either APIError a)
     runner = runExceptT . flip runReaderT (mkConfig argApiKey argPubKey)
-    formatTimestamp :: POSIXTime -> T.Text
-    formatTimestamp =
-        T.pack . formatTime defaultTimeLocale "%F %T%Z" . posixSecondsToUTCTime
 
 
 -- | CLI arguments supported by the executable.

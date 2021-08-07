@@ -8,16 +8,22 @@ name:           solana-staking-csvs
 version:        0.1.0.0
 synopsis:       Generate CSV Exports of your Solana Staking Rewards.
 description:    @solana-staking-csvs@ is a CLI program that queries the Solana blockchain
-                for an account's staking accounts, and exports all their staking rewards to
+                for an account's staking accounts and exports all their staking rewards to
                 a CSV file.
                 .
                 The <https://solanabeach.io/ Solana Beach API> is used to fetch data from
-                the blockchain and you will need a <https://github.com/solana-beach/api
-                free API key> to use this program.
+                the blockchain and you will need a
+                <https://github.com/solana-beach/api free API key> to use this program.
                 .
-                You can install @solana-stakingc-csvs@ with Stack: @stack install --resolver
-                nightly solana-staking-csvs@. Then run @solana-staking-csvs <API_KEY>
-                <ACCOUNT_PUBKEY>@ to print out your rewards in CSV format.
+                You can install @solana-staking-csvs@ with Stack: @stack install --resolver
+                nightly solana-staking-csvs@. Then run the following to print out an
+                account's rewards in CSV format:
+                .
+                @
+                  solana-staking-csvs \<API_KEY> \<ACCOUNT_PUBKEY>
+                @
+                .
+                See @solana-staking-csvs --help@ for additional options.
 category:       Web, Finance, Console
 homepage:       https://github.com/prikhi/solana-staking-csv#readme
 bug-reports:    https://github.com/prikhi/solana-staking-csvs/issues
@@ -38,6 +44,7 @@ source-repository head
 library
   exposed-modules:
       Console.SolanaStaking.Api
+      Console.SolanaStaking.Csv
       Console.SolanaStaking.Main
   other-modules:
       Paths_solana_staking_csvs
@@ -55,6 +62,8 @@ library
   build-depends:
       aeson ==1.*
     , base >=4.7 && <5
+    , bytestring <1
+    , cassava <1
     , cmdargs >=0.10 && <1
     , mtl ==2.*
     , req ==3.*

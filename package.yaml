@@ -30,16 +30,22 @@ synopsis:
 
 description: |
     @solana-staking-csvs@ is a CLI program that queries the Solana blockchain
-    for an account's staking accounts, and exports all their staking rewards to
+    for an account's staking accounts and exports all their staking rewards to
     a CSV file.
 
     The <https://solanabeach.io/ Solana Beach API> is used to fetch data from
-    the blockchain and you will need a <https://github.com/solana-beach/api
-    free API key> to use this program.
+    the blockchain and you will need a
+    <https://github.com/solana-beach/api free API key> to use this program.
 
-    You can install @solana-stakingc-csvs@ with Stack: @stack install --resolver
-    nightly solana-staking-csvs@. Then run @solana-staking-csvs <API_KEY>
-    <ACCOUNT_PUBKEY>@ to print out your rewards in CSV format.
+    You can install @solana-staking-csvs@ with Stack: @stack install --resolver
+    nightly solana-staking-csvs@. Then run the following to print out an
+    account's rewards in CSV format:
+
+    @
+      solana-staking-csvs \<API_KEY> \<ACCOUNT_PUBKEY>
+    @
+
+    See @solana-staking-csvs --help@ for additional options.
 
 
 ghc-options:
@@ -69,6 +75,8 @@ library:
         src
     dependencies:
         - aeson >= 1 && < 2
+        - bytestring < 1
+        - cassava < 1
         - cmdargs >= 0.10 && < 1
         - mtl >= 2 && < 3
         - req >= 3 && < 4
