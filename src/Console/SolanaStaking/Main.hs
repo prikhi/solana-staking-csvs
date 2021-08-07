@@ -11,7 +11,6 @@ module Console.SolanaStaking.Main
 
 import           Control.Monad                  ( (<=<)
                                                 , forM
-                                                , forM_
                                                 , unless
                                                 )
 import           Control.Monad.Except           ( ExceptT
@@ -21,9 +20,14 @@ import           Control.Monad.Reader           ( ReaderT
                                                 , liftIO
                                                 , runReaderT
                                                 )
-import           Data.Bifunctor                 ( second )
+import           Data.Bifunctor                 ( bimap
+                                                , second
+                                                )
 import           Data.List                      ( sortOn )
-import           Data.Time.Clock.POSIX          ( posixSecondsToUTCTime )
+import           Data.Maybe                     ( fromMaybe )
+import           Data.Time.Clock.POSIX          ( POSIXTime
+                                                , posixSecondsToUTCTime
+                                                )
 import           Data.Time.Format               ( defaultTimeLocale
                                                 , formatTime
                                                 )
@@ -34,6 +38,7 @@ import           System.Console.CmdArgs         ( (&=)
                                                 , argPos
                                                 , cmdArgs
                                                 , def
+                                                , explicit
                                                 , help
                                                 , helpArg
                                                 , name
@@ -61,43 +66,45 @@ run Args {..} = either (error . show) return <=< runner $ do
     stakes <- saResults <$> (getAccountStakes >>= raiseAPIError)
     -- Grab rewards for each stake account
     (stakeErrors, stakeRewards) <-
-        fmap (foldr (\(e_, r_) (e, r) -> (e_ <> e, r_ <> r)) ([], []))
-        . forM stakes
-        $ \sa -> do
-              second (map (sa, )) <$> getAllStakeRewards (saPubKey sa)
+        fmap (bimap concat concat . unzip) . forM stakes $ \sa -> do
+            second (map (sa, )) <$> getAllStakeRewards (saPubKey sa)
     unless (null stakeErrors) . liftIO $ do
         hPutStrLn stderr "Got errors while fetching stake rewards:"
         mapM_ (hPutStrLn stderr . ("\t" <>) . show) stakeErrors
-    -- Build ordered list of [(acc, reward, time)]
+    -- Write the CSV
     let orderedRewards = sortOn (srTimestamp . snd) stakeRewards
-    -- Print out the CSV
-    liftIO $ T.putStrLn "time,amount,stakeAccount,epoch"
-    forM_ orderedRewards $ \(stakeAccount, reward) ->
-        let formattedTime =
-                T.pack
-                    $ formatTime defaultTimeLocale "%F %T%Z"
-                    $ posixSecondsToUTCTime
-                    $ srTimestamp reward
-            formattedAmount = renderLamports $ srAmount reward
-            output          = T.intercalate
-                ","
-                [ formattedTime
-                , formattedAmount
-                , fromStakingPubKey (saPubKey stakeAccount)
-                , T.pack . show $ srEpoch reward
-                ]
-        in  liftIO $ T.putStrLn output
+        header         = "time,amount,stakeAccount,epoch\n"
+        output =
+            T.unlines . flip map orderedRewards $ \(stakeAccount, reward) ->
+                T.intercalate
+                    ","
+                    [ formatTimestamp $ srTimestamp reward
+                    , renderLamports $ srAmount reward
+                    , fromStakingPubKey $ saPubKey stakeAccount
+                    , T.pack . show $ srEpoch reward
+                    ]
+        outputFile = fromMaybe "-" argOutputFile
+    if outputFile == "-"
+        then liftIO . T.putStrLn $ header <> output
+        else liftIO . T.writeFile outputFile $ header <> output
+
   where
     runner :: ReaderT Config (ExceptT APIError IO) a -> IO (Either APIError a)
     runner = runExceptT . flip runReaderT (mkConfig argApiKey argPubKey)
+    formatTimestamp :: POSIXTime -> T.Text
+    formatTimestamp =
+        T.pack . formatTime defaultTimeLocale "%F %T%Z" . posixSecondsToUTCTime
 
 
 -- | CLI arguments supported by the executable.
 data Args = Args
-    { argApiKey :: String
+    { argApiKey     :: String
     -- ^ Solana Beach API Key
-    , argPubKey :: String
+    , argPubKey     :: String
     -- ^ Delegator's PubKey.
+    , argOutputFile :: Maybe String
+    -- ^ Optional output file. 'Nothing' or @'Just' "-"@ means print to
+    -- 'System.IO.stdout'.
     }
     deriving (Show, Read, Eq, Data, Typeable)
 
@@ -107,9 +114,17 @@ getArgs = cmdArgs argSpec
 
 argSpec :: Args
 argSpec =
-    Args { argApiKey = def &= argPos 0 &= typ "API_KEY"
-         , argPubKey = def &= argPos 1 &= typ "ACCOUNT_PUBKEY"
-         }
+    Args
+            { argApiKey     = def &= argPos 0 &= typ "API_KEY"
+            , argPubKey     = def &= argPos 1 &= typ "ACCOUNT_PUBKEY"
+            , argOutputFile =
+                Nothing
+                &= help "File to write the export to. Default: stdout"
+                &= explicit
+                &= name "output-file"
+                &= name "o"
+                &= typ "FILE"
+            }
         &= summary
                (  "solana-staking-csvs v"
                <> showVersion version

@@ -14,9 +14,8 @@ stack run -- <YOUR_API_KEY> <ACCOUNT_PUBKEY>
 
 TODO:
 
-* Use `cmdargs` for argument parsing.
+* Use `cassava` for CSV generation.
 * Add `-Y <year>` flag to limit years exported.
-* Add `-o <file>` flag to write to file instead of stdout.
 * Allow sourcing pubkey & apikey from env variables?
 * Move SolanaBeach API to separate, published package.
 * Publish on Hackage & Stackage.
