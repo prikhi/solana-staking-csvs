@@ -55,6 +55,7 @@ library
   build-depends:
       aeson ==1.*
     , base >=4.7 && <5
+    , cmdargs >=0.10 && <1
     , mtl ==2.*
     , req ==3.*
     , scientific <1

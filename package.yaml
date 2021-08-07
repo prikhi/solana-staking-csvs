@@ -69,6 +69,7 @@ library:
         src
     dependencies:
         - aeson >= 1 && < 2
+        - cmdargs >= 0.10 && < 1
         - mtl >= 2 && < 3
         - req >= 3 && < 4
         - scientific < 1
