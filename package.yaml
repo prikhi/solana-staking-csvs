@@ -79,7 +79,7 @@ library:
         - cassava < 1
         - cmdargs >= 0.10 && < 1
         - mtl >= 2 && < 3
-        - req >= 3 && < 4
+        - req >= 3.4 && < 4
         - scientific < 1
         - text < 2
         - time < 2
