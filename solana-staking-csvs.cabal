@@ -44,6 +44,7 @@ source-repository head
 library
   exposed-modules:
       Console.SolanaStaking.Api
+      Console.SolanaStaking.CoinTracking
       Console.SolanaStaking.Csv
       Console.SolanaStaking.Main
   other-modules:
@@ -65,6 +66,7 @@ library
     , bytestring <1
     , cassava <1
     , cmdargs >=0.10 && <1
+    , cointracking-imports <1
     , mtl ==2.*
     , req >=3.4 && <4
     , scientific <1

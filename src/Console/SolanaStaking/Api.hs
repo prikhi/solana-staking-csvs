@@ -28,6 +28,7 @@ module Console.SolanaStaking.Api
       -- * General API Types
     , Lamports(..)
     , renderLamports
+    , scientificLamports
     , StakingPubKey(..)
     ) where
 
@@ -153,12 +154,11 @@ newtype Lamports =
 
 -- | Render an amount of 'Lamports' as text, converting it to SOL.
 renderLamports :: Lamports -> T.Text
-renderLamports =
-    T.pack
-        . formatScientific Fixed (Just 9)
-        . (* 0.000000001)
-        . fromInteger
-        . fromLamports
+renderLamports = T.pack . formatScientific Fixed (Just 9) . scientificLamports
+
+-- | Convert Lamports into Scientific representation of SOL.
+scientificLamports :: Lamports -> Scientific
+scientificLamports = (* 0.000000001) . fromInteger . fromLamports
 
 
 -- | Get the staking rewards with a staking account's pubkey.

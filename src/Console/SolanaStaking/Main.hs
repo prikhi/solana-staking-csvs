@@ -45,6 +45,8 @@ import           System.IO                      ( hPutStrLn
                                                 )
 
 import           Console.SolanaStaking.Api
+import           Console.SolanaStaking.CoinTracking
+                                                ( makeCoinTrackingImport )
 import           Console.SolanaStaking.Csv      ( makeCsvContents )
 import           Paths_solana_staking_csvs      ( version )
 
@@ -67,11 +69,14 @@ run Args {..} = either (error . show) return <=< runner $ do
         mapM_ (hPutStrLn stderr . ("\t" <>) . show) stakeErrors
     -- Write the CSV
     let orderedRewards = sortOn (srTimestamp . snd) stakeRewards
-        output         = makeCsvContents orderedRewards
         outputFile     = fromMaybe "-" argOutputFile
-    if outputFile == "-"
-        then liftIO $ LBS.putStr output
-        else liftIO $ LBS.writeFile outputFile output
+    if argCoinTracking
+        then liftIO $ makeCoinTrackingImport outputFile orderedRewards
+        else do
+            let output = makeCsvContents orderedRewards
+            if outputFile == "-"
+                then liftIO $ LBS.putStr output
+                else liftIO $ LBS.writeFile outputFile output
   where
     runner :: ReaderT Config (ExceptT APIError IO) a -> IO (Either APIError a)
     runner = runExceptT . flip runReaderT (mkConfig argApiKey argPubKey)
@@ -79,13 +84,16 @@ run Args {..} = either (error . show) return <=< runner $ do
 
 -- | CLI arguments supported by the executable.
 data Args = Args
-    { argApiKey     :: String
+    { argApiKey       :: String
     -- ^ Solana Beach API Key
-    , argPubKey     :: String
+    , argPubKey       :: String
     -- ^ Delegator's PubKey.
-    , argOutputFile :: Maybe String
+    , argOutputFile   :: Maybe String
     -- ^ Optional output file. 'Nothing' or @'Just' "-"@ means print to
     -- 'System.IO.stdout'.
+    , argCoinTracking :: Bool
+    -- ^ Flag to enable writing/printing files formatted for CoinTracking
+    -- Imports.
     }
     deriving (Show, Read, Eq, Data, Typeable)
 
@@ -96,15 +104,19 @@ getArgs = cmdArgs argSpec
 argSpec :: Args
 argSpec =
     Args
-            { argApiKey     = def &= argPos 0 &= typ "API_KEY"
-            , argPubKey     = def &= argPos 1 &= typ "ACCOUNT_PUBKEY"
-            , argOutputFile =
+            { argApiKey       = def &= argPos 0 &= typ "API_KEY"
+            , argPubKey       = def &= argPos 1 &= typ "ACCOUNT_PUBKEY"
+            , argOutputFile   =
                 Nothing
                 &= help "File to write the export to. Default: stdout"
                 &= explicit
                 &= name "output-file"
                 &= name "o"
                 &= typ "FILE"
+            , argCoinTracking = False
+                                &= help "Generate a CoinTracking Import file."
+                                &= explicit
+                                &= name "cointracking"
             }
         &= summary
                (  "solana-staking-csvs v"
