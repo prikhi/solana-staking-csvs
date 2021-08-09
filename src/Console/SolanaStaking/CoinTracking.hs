@@ -53,7 +53,7 @@ makeImportData = mapM $ \(StakingAccount {..}, StakeReward {..}) -> do
         , ctidFee       = Nothing
         , ctidExchange  = "Solana Staking"
         , ctidGroup     = "Staking"
-        , ctidComment   = ""
+        , ctidComment   = "Imported from solana-staking-csvs"
         , ctidDate      = zonedTime
         , ctidTradeId   =
             "SOL-STAKE-" <> fromStakingPubKey saPubKey <> "-" <> T.pack
