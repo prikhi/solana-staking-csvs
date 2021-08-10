@@ -5,12 +5,12 @@
 
 packages:
 - completed:
-    hackage: cointracking-imports-0.1.0.0@sha256:42cf5d7c00059b041d9e76fbaa4dee9284465e8c8940a07d2394ddbc5dcc0040,3049
+    hackage: cointracking-imports-0.1.0.1@sha256:76885641705c1d197347018428542afc121aea80000d4030ee7556326a7e2e14,3049
     pantry-tree:
-      size: 466
-      sha256: e38ea758da3306139883c77728d9a67a2a7b7cf83afe2bb98d0a2d85a1aee3b0
+      size: 467
+      sha256: 16eb81358a670ed8c00ea0b823b27deb2325819de022189ba4516f90668c3e60
   original:
-    hackage: cointracking-imports-0.1.0.0
+    hackage: cointracking-imports-0.1.0.1
 snapshots:
 - completed:
     size: 585817

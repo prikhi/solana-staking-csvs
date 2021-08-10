@@ -38,7 +38,7 @@ makeCoinTrackingImport dest = makeImportData >=> writeOrPrintImportData dest
 -- | Write or print the generated import data.
 writeOrPrintImportData :: FilePath -> [CTImportData] -> IO ()
 writeOrPrintImportData dest importData = if dest == "-"
-    then LBC.putStr $ coinTrackingCsvImport importData
+    then LBC.putStrLn $ coinTrackingCsvImport importData
     else writeImportDataToFile dest importData
 
 -- | Turn a 'StakeReward' into a 'CTImportData', localizing the reward
