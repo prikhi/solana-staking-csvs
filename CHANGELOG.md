@@ -2,6 +2,8 @@
 
 ## master
 
+* Bump dependency versions(aeson).
+
 
 ## v0.1.1.0
 

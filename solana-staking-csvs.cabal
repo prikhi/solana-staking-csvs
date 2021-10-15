@@ -25,7 +25,7 @@ description:    @solana-staking-csvs@ is a CLI program that queries the Solana b
                 .
                 See @solana-staking-csvs --help@ for additional options.
 category:       Web, Finance, Console
-homepage:       https://github.com/prikhi/solana-staking-csv#readme
+homepage:       https://github.com/prikhi/solana-staking-csvs#readme
 bug-reports:    https://github.com/prikhi/solana-staking-csvs/issues
 author:         Pavan Rikhi
 maintainer:     pavan.rikhi@gmail.com
@@ -61,7 +61,7 @@ library
       ViewPatterns
   ghc-options: -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -O2
   build-depends:
-      aeson ==1.*
+      aeson >=1 && <3
     , base >=4.7 && <5
     , bytestring <1
     , cassava <1

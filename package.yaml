@@ -74,7 +74,7 @@ library:
     source-dirs:
         src
     dependencies:
-        - aeson >= 1 && < 2
+        - aeson >= 1 && < 3
         - bytestring < 1
         - cassava < 1
         - cmdargs >= 0.10 && < 1
