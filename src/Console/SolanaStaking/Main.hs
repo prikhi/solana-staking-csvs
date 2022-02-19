@@ -63,7 +63,11 @@ run Args {..} = either (error . show) return <=< runner $ do
     -- Grab rewards for each stake account
     (stakeErrors, stakeRewards) <-
         fmap (bimap concat concat . unzip) . forM stakes $ \sa -> do
-            second (map (sa, )) <$> getAllStakeRewards (saPubKey sa)
+
+            second (map (sa, ))
+                <$> maybe (getAllStakeRewards (saPubKey sa))
+                          (getYearsStakeRewards $ saPubKey sa)
+                          argYear
     unless (null stakeErrors) . liftIO $ do
         hPutStrLn stderr "Got errors while fetching stake rewards:"
         mapM_ (hPutStrLn stderr . ("\t" <>) . show) stakeErrors
@@ -94,6 +98,8 @@ data Args = Args
     , argCoinTracking :: Bool
     -- ^ Flag to enable writing/printing files formatted for CoinTracking
     -- Imports.
+    , argYear         :: Maybe Integer
+    -- ^ Year to limit output to.
     }
     deriving (Show, Read, Eq, Data, Typeable)
 
@@ -117,6 +123,12 @@ argSpec =
                                 &= help "Generate a CoinTracking Import file."
                                 &= explicit
                                 &= name "cointracking"
+            , argYear         = Nothing
+                                &= help "Limit to given year"
+                                &= explicit
+                                &= name "y"
+                                &= name "year"
+                                &= typ "YYYY"
             }
         &= summary
                (  "solana-staking-csvs v"

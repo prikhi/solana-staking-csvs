@@ -15,7 +15,6 @@ stack run -- --help
 
 TODO:
 
-* Add `-Y <year>` flag to limit years exported(or start/end flags?).
 * Allow sourcing pubkey & apikey from env variables?
 * Move SolanaBeach API to separate, published package.
 

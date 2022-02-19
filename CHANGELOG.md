@@ -2,6 +2,7 @@
 
 ## master
 
+* Add `--year` flag to allow filtering the output by date.
 * Bump dependency versions(aeson).
 
 

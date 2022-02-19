@@ -13,6 +13,7 @@ module Console.SolanaStaking.Api
       -- * Requests / Responses
     , APIResponse(..)
     , APIError(..)
+    , runApi
     , raiseAPIError
       -- ** Get Stake Accounts
     , getAccountStakes
@@ -20,6 +21,7 @@ module Console.SolanaStaking.Api
     , StakingAccount(..)
       -- ** Get Staking Rewards
     , getAllStakeRewards
+    , getYearsStakeRewards
     , getStakeRewards
     , StakeReward(..)
       -- ** Get Block
@@ -47,12 +49,18 @@ import           Data.Aeson                     ( (.:)
                                                 , Value(Object)
                                                 , withObject
                                                 )
+import           Data.Bifunctor                 ( second )
 import           Data.Scientific                ( FPFormat(Fixed)
                                                 , Scientific
                                                 , formatScientific
                                                 )
 import           Data.Text.Encoding             ( encodeUtf8 )
-import           Data.Time.Clock.POSIX          ( POSIXTime )
+import           Data.Time                      ( toGregorian
+                                                , utctDay
+                                                )
+import           Data.Time.Clock.POSIX          ( POSIXTime
+                                                , posixSecondsToUTCTime
+                                                )
 import           GHC.Generics                   ( Generic )
 import           Network.HTTP.Req               ( (/:)
                                                 , (/~)
@@ -177,29 +185,57 @@ getStakeRewards (StakingPubKey stakeAccountPubkey) mbEpochCursor = do
 -- we have to use the earliest epoch as the @cursor@ in an additional
 -- request to see if there are any more rewards.
 getAllStakeRewards
-    :: forall m
-     . (MonadIO m, MonadReader Config m)
+    :: (MonadIO m, MonadReader Config m)
     => StakingPubKey
     -> m ([APIError], [StakeReward])
 getAllStakeRewards pubkey =
-    getStakeRewards pubkey Nothing >>= runExceptT . raiseAPIError >>= go
+    getStakeRewards pubkey Nothing >>= runApi >>= getStakeRewardsUntil
+        pubkey
+        (const True)
         ([], [])
-  where
-    go
-        :: ([APIError], [StakeReward])
-        -> Either APIError [StakeReward]
-        -> m ([APIError], [StakeReward])
-    go (errs, rws) = \case
-        Left  err     -> return (err : errs, rws)
-        Right rewards -> if length rewards < 5
-            then return (errs, rewards <> rws)
-            else
-                let minEpoch = minimum $ map srEpoch rewards
-                in  getStakeRewards pubkey (Just minEpoch)
-                    >>= runExceptT
-                    .   raiseAPIError
-                    >>= go (errs, rewards <> rws)
 
+-- | Get the year's worth of staking rewards for the given account.
+getYearsStakeRewards
+    :: (MonadIO m, MonadReader Config m)
+    => StakingPubKey
+    -> Integer
+    -> m ([APIError], [StakeReward])
+getYearsStakeRewards pubkey year =
+    fmap (second $ filter ((== year) . rewardYear))
+        $   getStakeRewards pubkey Nothing
+        >>= runApi
+        >>= getStakeRewardsUntil pubkey stopAfterYear ([], [])
+  where
+    rewardYear :: StakeReward -> Integer
+    rewardYear =
+        (\(y, _, _) -> y)
+            . toGregorian
+            . utctDay
+            . posixSecondsToUTCTime
+            . srTimestamp
+
+    stopAfterYear :: [StakeReward] -> Bool
+    stopAfterYear rewards =
+        let years = map rewardYear rewards in any (< year) years
+
+-- | Fetch staking rewards until we get less than 5 rewards or the general
+-- predicate returns true.
+getStakeRewardsUntil
+    :: (MonadIO m, MonadReader Config m)
+    => StakingPubKey
+    -> ([StakeReward] -> Bool)
+    -> ([APIError], [StakeReward])
+    -> Either APIError [StakeReward]
+    -> m ([APIError], [StakeReward])
+getStakeRewardsUntil pubkey cond (errs, rws) = \case
+    Left  err     -> return (err : errs, rws)
+    Right rewards -> if length rewards < 5 || cond rewards
+        then return (errs, rewards <> rws)
+        else
+            let minEpoch = minimum $ map srEpoch rewards
+            in  getStakeRewards pubkey (Just minEpoch)
+                >>= runApi
+                >>= getStakeRewardsUntil pubkey cond (errs, rewards <> rws)
 
 
 -- | A Staking Reward Payment.
@@ -302,6 +338,10 @@ instance FromJSON a => FromJSON (APIResponse a) where
                     Just (_ :: Bool) -> return ProcessingResponse
                 Nothing -> fmap SuccessfulReponse . parseJSON $ Object o
         _ -> SuccessfulReponse <$> parseJSON v
+
+-- | Evaluate an API response.
+runApi :: Monad m => APIResponse a -> m (Either APIError a)
+runApi = runExceptT . raiseAPIError
 
 -- | Pull the inner value out of an 'APIResponse' or throw the respective
 -- 'APIError'.
