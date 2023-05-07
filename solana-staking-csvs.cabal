@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -67,6 +67,9 @@ library
     , cassava <1
     , cmdargs >=0.10 && <1
     , cointracking-imports <1
+    , exceptions <1
+    , http-client <1
+    , http-types <1
     , mtl ==2.*
     , req >=3.4 && <4
     , scientific <1

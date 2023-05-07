@@ -35,6 +35,11 @@ module Console.SolanaStaking.Api
     ) where
 
 import           Control.Concurrent             ( threadDelay )
+import           Control.Exception              ( throwIO )
+import           Control.Monad                  ( (>=>) )
+import           Control.Monad.Catch            ( MonadCatch
+                                                , try
+                                                )
 import           Control.Monad.Except           ( MonadError(throwError)
                                                 , runExceptT
                                                 )
@@ -47,6 +52,7 @@ import           Data.Aeson                     ( (.:)
                                                 , (.:?)
                                                 , FromJSON(parseJSON)
                                                 , Value(Object)
+                                                , eitherDecode
                                                 , withObject
                                                 )
 import           Data.Bifunctor                 ( second )
@@ -62,9 +68,16 @@ import           Data.Time.Clock.POSIX          ( POSIXTime
                                                 , posixSecondsToUTCTime
                                                 )
 import           GHC.Generics                   ( Generic )
+import           Network.HTTP.Client            ( HttpException(..)
+                                                , HttpExceptionContent(..)
+                                                , responseStatus
+                                                )
 import           Network.HTTP.Req               ( (/:)
                                                 , (/~)
                                                 , GET(GET)
+                                                , HttpException(..)
+                                                , HttpResponse
+                                                , HttpResponseBody
                                                 , NoReqBody(NoReqBody)
                                                 , Option
                                                 , Scheme(Https)
@@ -79,10 +92,13 @@ import           Network.HTTP.Req               ( (/:)
                                                 , responseBody
                                                 , runReq
                                                 )
+import           Network.HTTP.Types             ( statusCode )
 import           System.IO                      ( hPutStrLn
                                                 , stderr
                                                 )
+import           Text.Read                      ( readMaybe )
 
+import qualified Data.ByteString.Lazy          as LBS
 import qualified Data.Text                     as T
 
 -- | Solana Beach API Configuration
@@ -108,7 +124,8 @@ baseUrl = https "api.solanabeach.io" /: "v1"
 
 -- | Get the staking accounts for the 'cAccountPubKey'.
 getAccountStakes
-    :: (MonadIO m, MonadReader Config m) => m (APIResponse StakingAccounts)
+    :: (MonadReader Config m, MonadCatch m, MonadIO m)
+    => m (APIResponse StakingAccounts)
 getAccountStakes = do
     pubkey <- asks cAccountPubKey
     getReq (baseUrl /: "account" /~ pubkey /: "stakes") mempty
@@ -171,7 +188,7 @@ scientificLamports = (* 0.000000001) . fromInteger . fromLamports
 
 -- | Get the staking rewards with a staking account's pubkey.
 getStakeRewards
-    :: (MonadIO m, MonadReader Config m)
+    :: (MonadReader Config m, MonadCatch m, MonadIO m)
     => StakingPubKey
     -> Maybe Integer
     -> m (APIResponse [StakeReward])
@@ -185,7 +202,7 @@ getStakeRewards (StakingPubKey stakeAccountPubkey) mbEpochCursor = do
 -- we have to use the earliest epoch as the @cursor@ in an additional
 -- request to see if there are any more rewards.
 getAllStakeRewards
-    :: (MonadIO m, MonadReader Config m)
+    :: (MonadReader Config m, MonadCatch m, MonadIO m)
     => StakingPubKey
     -> m ([APIError], [StakeReward])
 getAllStakeRewards pubkey =
@@ -196,7 +213,7 @@ getAllStakeRewards pubkey =
 
 -- | Get the year's worth of staking rewards for the given account.
 getYearsStakeRewards
-    :: (MonadIO m, MonadReader Config m)
+    :: (MonadReader Config m, MonadCatch m, MonadIO m)
     => StakingPubKey
     -> Integer
     -> m ([APIError], [StakeReward])
@@ -221,7 +238,7 @@ getYearsStakeRewards pubkey year =
 -- | Fetch staking rewards until we get less than 5 rewards or the general
 -- predicate returns true.
 getStakeRewardsUntil
-    :: (MonadIO m, MonadReader Config m)
+    :: (MonadReader Config m, MonadCatch m, MonadIO m)
     => StakingPubKey
     -> ([StakeReward] -> Bool)
     -> ([APIError], [StakeReward])
@@ -260,7 +277,9 @@ instance FromJSON StakeReward where
 
 -- | Get information about a specific block number.
 getBlock
-    :: (MonadIO m, MonadReader Config m) => Integer -> m (APIResponse Block)
+    :: (MonadReader Config m, MonadCatch m, MonadIO m)
+    => Integer
+    -> m (APIResponse Block)
 getBlock blockNum = do
     getReq (baseUrl /: "block" /~ blockNum) mempty
 
@@ -289,7 +308,7 @@ instance FromJSON Block where
 -- Note: Prints to 'stderr' when waiting for request to finish processing.
 getReq
     :: forall m a
-     . (MonadReader Config m, MonadIO m, FromJSON a)
+     . (MonadReader Config m, FromJSON a, MonadIO m, MonadCatch m)
     => Url 'Https
     -> Option 'Https
     -> m (APIResponse a)
@@ -304,7 +323,7 @@ getReq endpoint options = fetchWithRetries 0
             apikey <- asks cApiKey
             let authHeader =
                     header "Authorization" $ "Bearer: " <> encodeUtf8 apikey
-            respBody <- responseBody <$> runReq
+            respBody <- catchRateLimitError $ runReq
                 defaultHttpConfig
                 (req GET endpoint NoReqBody jsonResponse $ authHeader <> options
                 )
@@ -315,7 +334,29 @@ getReq endpoint options = fetchWithRetries 0
                         "Waiting for API to finish processing request..."
                     liftIO $ threadDelay $ 10 * 1000000
                     fetchWithRetries (retryCount + 1)
+                RateLimitResponse wait -> do
+                    liftIO
+                        $  hPutStrLn stderr
+                        $  "Exceeded rate limit, waiting "
+                        <> show wait
+                        <> " seconds before retrying..."
+                    liftIO $ threadDelay $ wait * 1000000
+                    fetchWithRetries retryCount
+
                 _ -> return respBody
+    catchRateLimitError
+        :: FromJSON (HttpResponseBody b)
+        => HttpResponse b => m b -> m (HttpResponseBody b)
+    catchRateLimitError = try >=> \case
+        Left e@(VanillaHttpException (HttpExceptionRequest _ (StatusCodeException resp body)))
+            -> if statusCode (responseStatus resp) == 429
+                then
+                    either (liftIO . throwIO . JsonHttpException) return
+                    $ eitherDecode
+                    $ LBS.fromStrict body
+                else liftIO $ throwIO e
+        Left  e -> liftIO $ throwIO e
+        Right r -> return $ responseBody r
 
 
 
@@ -324,6 +365,7 @@ getReq endpoint options = fetchWithRetries 0
 data APIResponse a
     = SuccessfulReponse a
     | ProcessingResponse
+    | RateLimitResponse Int
     | ErrorResponse APIError
     deriving (Show, Read, Eq)
 
@@ -334,7 +376,10 @@ instance FromJSON a => FromJSON (APIResponse a) where
         Object o -> do
             o .:? "err" >>= \case
                 Just errMsg -> o .:? "processing" >>= \case
-                    Nothing          -> return $ ErrorResponse $ APIError errMsg
+                    Nothing -> o .:? "retry" >>= \case
+                        Just (readMaybe -> Just i) ->
+                            return $ RateLimitResponse i
+                        _ -> return $ ErrorResponse $ APIError errMsg
                     Just (_ :: Bool) -> return ProcessingResponse
                 Nothing -> fmap SuccessfulReponse . parseJSON $ Object o
         _ -> SuccessfulReponse <$> parseJSON v
@@ -350,7 +395,8 @@ raiseAPIError = \case
     SuccessfulReponse v -> return v
     ProcessingResponse ->
         throwError $ APIError "Request cancelled during processing wait."
-    ErrorResponse err -> throwError err
+    RateLimitResponse i   -> throwError $ RateLimitError i
+    ErrorResponse     err -> throwError err
 
 
 -- | Potential error responses from the Solana Beach API.
@@ -359,4 +405,6 @@ data APIError
     -- ^ Generic API error with message.
     | RetriesExceeded T.Text
     -- ^ Exceeded maximum number of 'ProcessingResponse' retries.
+    | RateLimitError Int
+    -- ^ Rate limiting 429 error.
     deriving (Show, Read, Eq, Generic)

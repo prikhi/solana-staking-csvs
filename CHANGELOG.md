@@ -2,6 +2,7 @@
 
 ## master
 
+* Handle breaking API changes when rate limited.
 
 ## v0.1.2.0
 
