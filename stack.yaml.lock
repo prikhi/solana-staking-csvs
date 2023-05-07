@@ -3,18 +3,11 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages:
-- completed:
-    hackage: cointracking-imports-0.1.0.1@sha256:76885641705c1d197347018428542afc121aea80000d4030ee7556326a7e2e14,3049
-    pantry-tree:
-      size: 467
-      sha256: 16eb81358a670ed8c00ea0b823b27deb2325819de022189ba4516f90668c3e60
-  original:
-    hackage: cointracking-imports-0.1.0.1
+packages: []
 snapshots:
 - completed:
-    size: 587393
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/18/25.yaml
-    sha256: 1b74fb5e970497b5aefae56703f1bd44aa648bd1a5ef95c1eb8c29775087e2bf
+    sha256: 126fa33ceb11f5e85ceb4e86d434756bd9a8439e2e5776d306a15fbc63b01e89
+    size: 650041
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/20.yaml
   original:
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/18/25.yaml
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/20.yaml
