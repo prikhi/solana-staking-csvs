@@ -246,7 +246,7 @@ getStakeRewardsUntil
     -> m ([APIError], [StakeReward])
 getStakeRewardsUntil pubkey cond (errs, rws) = \case
     Left  err     -> return (err : errs, rws)
-    Right rewards -> if length rewards < 5 || cond rewards
+    Right rewards -> if null rewards || cond rewards
         then return (errs, rewards <> rws)
         else
             let minEpoch = minimum $ map srEpoch rewards

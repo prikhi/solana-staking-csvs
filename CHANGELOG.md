@@ -2,6 +2,8 @@
 
 ## master
 
+* Fetch rewards until no more rewards are returned instead of stopping when
+  less than the 5-item page limit is returned.
 * Handle breaking API changes when rate limited.
 
 ## v0.1.2.0
