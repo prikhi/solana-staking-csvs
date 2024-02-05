@@ -63,6 +63,7 @@ dependencies:
 default-extensions:
     - DataKinds
     - DeriveGeneric
+    - ImportQualifiedPost
     - LambdaCase
     - OverloadedStrings
     - TupleSections

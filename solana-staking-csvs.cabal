@@ -54,6 +54,7 @@ library
   default-extensions:
       DataKinds
       DeriveGeneric
+      ImportQualifiedPost
       LambdaCase
       OverloadedStrings
       TupleSections
@@ -87,6 +88,7 @@ executable solana-staking-csvs
   default-extensions:
       DataKinds
       DeriveGeneric
+      ImportQualifiedPost
       LambdaCase
       OverloadedStrings
       TupleSections
@@ -108,6 +110,7 @@ test-suite solana-staking-csvs-test
   default-extensions:
       DataKinds
       DeriveGeneric
+      ImportQualifiedPost
       LambdaCase
       OverloadedStrings
       TupleSections

@@ -1,8 +1,9 @@
 module Main where
 
-import           Console.SolanaStaking.Main     ( getArgs
-                                                , run
-                                                )
+import Console.SolanaStaking.Main
+    ( getArgs
+    , run
+    )
 
 
 main :: IO ()
