@@ -67,6 +67,7 @@ library
     , cassava <1
     , cmdargs >=0.10 && <1
     , cointracking-imports <1
+    , containers <1
     , exceptions <1
     , http-client <1
     , http-types <1

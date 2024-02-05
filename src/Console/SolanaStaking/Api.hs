@@ -175,7 +175,7 @@ newtype StakingPubKey =
 
 -- | An amount of Lamports, each of which represent 0.000000001 SOL.
 newtype Lamports =
-    Lamports { fromLamports :: Integer } deriving (Show, Read, Eq, Generic, FromJSON)
+    Lamports { fromLamports :: Integer } deriving (Show, Read, Eq, Num, Generic, FromJSON)
 
 -- | Render an amount of 'Lamports' as text, converting it to SOL.
 renderLamports :: Lamports -> T.Text
