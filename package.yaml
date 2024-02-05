@@ -86,7 +86,7 @@ library:
         - mtl >= 2 && < 3
         - req >= 3.4 && < 4
         - scientific < 1
-        - text < 2
+        - text < 3
         - time < 2
 
 executables:
