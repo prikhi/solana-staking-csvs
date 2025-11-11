@@ -168,7 +168,7 @@ argSpec =
         &= summary
             ( "solana-staking-csvs v"
                 <> showVersion version
-                <> ", Pavan Rikhi 2021-2024"
+                <> ", Pavan Rikhi 2021-2025"
             )
         &= program "solana-staking-csvs"
         &= helpArg [name "h"]
