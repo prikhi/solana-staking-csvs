@@ -33,6 +33,8 @@ jobs:
             stack-build-${{ matrix.resolver }}-${{ github.ref }}-
             stack-build-${{ matrix.resolver }}-
             stack-build-
+      - name: Install bzip2
+        run: sudo apt install -y bzip2
       - uses: haskell-actions/setup@v2
         with:
           enable-stack: true
@@ -62,6 +64,8 @@ jobs:
             stack-build-nightly-${{ steps.date.outputs.year }}-${{ steps.date.outputs.month }}-
             stack-build-nightly-${{ steps.date.outputs.year }}-
             stack-build-nightly-
+      - name: Install bzip2
+        run: sudo apt install -y bzip2
       - uses: haskell-actions/setup@v2
         with:
           enable-stack: true
@@ -92,6 +96,8 @@ jobs:
             cabal-build-${{ matrix.ghc }}-${{ github.ref }}-
             cabal-build-${{ matrix.ghc }}-
             cabal-build-
+      - name: Install bzip2
+        run: sudo apt install -y bzip2
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ matrix.ghc }}
