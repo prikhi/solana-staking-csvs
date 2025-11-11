@@ -2,6 +2,7 @@
 
 ## master
 
+* Migrate to new `v2` API endpoints.
 
 
 ## v0.1.3.0

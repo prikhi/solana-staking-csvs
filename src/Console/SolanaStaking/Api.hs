@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -114,7 +115,7 @@ mkConfig (T.pack -> cApiKey) (T.pack -> cAccountPubKey) = Config {..}
 
 -- | Base URL to Solana Beach's API
 baseUrl :: Url 'Https
-baseUrl = https "api.solanabeach.io" /: "v1"
+baseUrl = https "api.solanabeach.io" /: "v2"
 
 
 -- | Get the staking accounts for the 'cAccountPubKey'.
@@ -123,24 +124,19 @@ getAccountStakes
     => m (APIResponse StakingAccounts)
 getAccountStakes = do
     pubkey <- asks cAccountPubKey
-    getReq (baseUrl /: "account" /~ pubkey /: "stakes") mempty
+    getReq (baseUrl /: "account" /~ pubkey /: "stake-accounts") mempty
 
 
 -- | Single Result Page of Staking Accounts Query.
-data StakingAccounts = StakingAccounts
+newtype StakingAccounts = StakingAccounts
     { saResults :: [StakingAccount]
     -- ^ The returned staking accounts
-    , saTotalPages :: Integer
-    -- ^ The total number of pages for the Account's PubKey.
     }
     deriving (Show, Read, Eq, Generic)
 
 
 instance FromJSON StakingAccounts where
-    parseJSON = withObject "StakingAccounts" $ \o -> do
-        saResults <- o .: "data"
-        saTotalPages <- o .: "totalPages"
-        return StakingAccounts {..}
+    parseJSON v = StakingAccounts <$> parseJSON v
 
 
 -- | A single Staking Account.
@@ -157,15 +153,9 @@ data StakingAccount = StakingAccount
 
 instance FromJSON StakingAccount where
     parseJSON = withObject "StakingAccount" $ \o -> do
-        saPubKey <- o .: "pubkey" >>= (.: "address")
-        saLamports <- o .: "lamports"
-        saValidatorName <-
-            o
-                .: "data"
-                >>= (.: "stake")
-                >>= (.: "delegation")
-                >>= (.: "validatorInfo")
-                >>= (.: "name")
+        saPubKey <- o .: "stakePubkey"
+        saLamports <- o .: "stake"
+        saValidatorName <- o .: "name"
         return StakingAccount {..}
 
 
@@ -194,11 +184,13 @@ getStakeRewards
     :: (MonadReader Config m, MonadCatch m, MonadIO m)
     => StakingPubKey
     -> Maybe Integer
-    -> m (APIResponse [StakeReward])
-getStakeRewards (StakingPubKey stakeAccountPubkey) mbEpochCursor = do
+    -> m (APIResponse StakingRewards)
+getStakeRewards (StakingPubKey stakeAccountPubkey) mbOffset = do
     getReq
-        (baseUrl /: "account" /: stakeAccountPubkey /: "stake-rewards")
-        (queryParam "cursor" mbEpochCursor)
+        (baseUrl /: "account" /: stakeAccountPubkey /: "staking-rewards")
+        ( queryParam "limit" (Just 1000 :: Maybe Integer)
+            <> queryParam "offset" mbOffset
+        )
 
 
 -- | Get all the staking rewards for the given account.
@@ -251,18 +243,32 @@ getStakeRewardsUntil
     => StakingPubKey
     -> ([StakeReward] -> Bool)
     -> ([APIError], [StakeReward])
-    -> Either APIError [StakeReward]
+    -> Either APIError StakingRewards
     -> m ([APIError], [StakeReward])
 getStakeRewardsUntil pubkey cond (errs, rws) = \case
     Left err -> return (err : errs, rws)
-    Right rewards ->
-        if null rewards || cond rewards
-            then return (errs, rewards <> rws)
+    Right res ->
+        if null res.srRewards || cond res.srRewards
+            then return (errs, res.srRewards <> rws)
             else
-                let minEpoch = minimum $ map srEpoch rewards
-                 in getStakeRewards pubkey (Just minEpoch)
+                let offset = res.srPagination.limit + res.srPagination.offset
+                 in getStakeRewards pubkey (Just offset)
                         >>= runApi
-                        >>= getStakeRewardsUntil pubkey cond (errs, rewards <> rws)
+                        >>= getStakeRewardsUntil pubkey cond (errs, res.srRewards <> rws)
+
+
+data StakingRewards = StakingRewards
+    { srRewards :: [StakeReward]
+    , srPagination :: PaginationData
+    }
+    deriving (Show, Read, Eq, Generic)
+
+
+instance FromJSON StakingRewards where
+    parseJSON = withObject "StakingRewards" $ \o -> do
+        srRewards <- o .: "rewards"
+        srPagination <- o .: "pagination"
+        pure StakingRewards {..}
 
 
 -- | A Staking Reward Payment.
@@ -280,9 +286,12 @@ data StakeReward = StakeReward
 
 instance FromJSON StakeReward where
     parseJSON = withObject "StakeReward" $ \o -> do
-        srEpoch <- o .: "epoch"
-        srSlot <- o .: "effectiveSlot"
-        srAmount <- o .: "amount"
+        -- v1 API returned a different epoch than v2.
+        -- We continue returning the v1 amount(1 less than v2).
+        -- Maybe "effective" vs "granted" epoch?
+        srEpoch <- pred <$> o .: "epoch"
+        srSlot <- o .: "slot"
+        srAmount <- o .: "lamports"
         srTimestamp <- o .: "timestamp"
         return StakeReward {..}
 
@@ -316,6 +325,22 @@ instance FromJSON Block where
         return Block {..}
 
 
+data PaginationData = PaginationData
+    { total :: Integer
+    , offset :: Integer
+    , limit :: Integer
+    }
+    deriving (Show, Read, Eq, Generic)
+
+
+instance FromJSON PaginationData where
+    parseJSON = withObject "PaginationData" $ \o -> do
+        total <- o .: "total"
+        offset <- o .: "offset"
+        limit <- o .: "limit"
+        pure PaginationData {..}
+
+
 -- | Generic GET request to the Solana Beach API with up to 5 retries for
 -- @ProcessingResponse@.
 --
@@ -342,8 +367,7 @@ getReq endpoint options = fetchWithRetries 0
                     catchRateLimitError $
                         runReq
                             defaultHttpConfig
-                            ( req GET endpoint NoReqBody jsonResponse $ authHeader <> options
-                            )
+                            (req GET endpoint NoReqBody jsonResponse $ authHeader <> options)
                 case respBody of
                     ProcessingResponse -> do
                         liftIO $

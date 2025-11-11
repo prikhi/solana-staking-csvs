@@ -13,7 +13,8 @@ import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.Reader (MonadIO, ReaderT, liftIO, runReaderT)
 import Data.Bifunctor (bimap, second)
 import Data.List (sortOn)
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.Maybe (fromMaybe)
 import Data.Time (LocalTime (..), ZonedTime (..), utcToLocalZonedTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Version (showVersion)
@@ -40,6 +41,7 @@ import Console.SolanaStaking.Csv (makeCsvContents)
 import Paths_solana_staking_csvs (version)
 
 import Data.ByteString.Lazy qualified as LBS
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as M
 import Data.Text qualified as T
 
@@ -79,7 +81,7 @@ run Args {..} = either (error . show) return <=< runner $ do
     runner = runExceptT . flip runReaderT (mkConfig argApiKey argPubKey)
     aggregateRewards :: (MonadIO m) => [(StakingAccount, StakeReward)] -> m [(StakingAccount, StakeReward)]
     aggregateRewards =
-        fmap (mapMaybe (aggregate . snd) . M.toList)
+        fmap (map (aggregate . snd) . M.toList)
             . foldM
                 ( \acc r -> do
                     rewardTime <- liftIO . utcToLocalZonedTime $ posixSecondsToUTCTime $ srTimestamp $ snd r
@@ -87,28 +89,25 @@ run Args {..} = either (error . show) return <=< runner $ do
                         M.insertWith
                             (<>)
                             (localDay $ zonedTimeToLocalTime rewardTime)
-                            [r]
+                            (pure r)
                             acc
                 )
                 M.empty
 
-    aggregate :: [(StakingAccount, StakeReward)] -> Maybe (StakingAccount, StakeReward)
-    aggregate = \case
-        [] -> Nothing
-        rs ->
-            Just
-                ( StakingAccount
-                    { saValidatorName = "AGGREGATE-" <> T.pack (show $ length rs)
-                    , saPubKey = StakingPubKey $ T.pack argPubKey
-                    , saLamports = sum $ map (saLamports . fst) rs
-                    }
-                , StakeReward
-                    { srTimestamp = minimum $ map (srTimestamp . snd) rs
-                    , srSlot = srSlot $ snd $ head rs
-                    , srEpoch = srEpoch $ snd $ head rs
-                    , srAmount = sum $ map (srAmount . snd) rs
-                    }
-                )
+    aggregate :: NonEmpty (StakingAccount, StakeReward) -> (StakingAccount, StakeReward)
+    aggregate rs =
+        ( StakingAccount
+            { saValidatorName = "AGGREGATE-" <> T.pack (show $ length rs)
+            , saPubKey = StakingPubKey $ T.pack argPubKey
+            , saLamports = sum $ fmap (saLamports . fst) rs
+            }
+        , StakeReward
+            { srTimestamp = minimum $ fmap (srTimestamp . snd) rs
+            , srSlot = srSlot . snd $ NE.head rs
+            , srEpoch = srEpoch . snd $ NE.head rs
+            , srAmount = sum $ fmap (srAmount . snd) rs
+            }
+        )
 
 
 -- | CLI arguments supported by the executable.
